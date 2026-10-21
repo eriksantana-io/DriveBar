@@ -1,5 +1,7 @@
 # DriveBar
 
+Version 1.1.1 makes the menu bar panel follow its content height when the ejectable-drive filter changes, so it can shrink after showing a longer list.
+
 Version 1.1 adds a custom app icon and a persistent “Show only ejectable drives” switch, enabled by default. It hides internal and non-ejectable volumes, while mounted network shares remain visible. Turn it off to see all mounted volumes.
 
 Version 1.0.1 fixes the drive panel's scroll area sizing and keeps volumes listed when optional metadata is unavailable. Adds startup-volume and Finder mount-root discovery fallbacks. SMB shares already mounted in Finder are supported; browsing a server without mounting a share does not add a volume. macOS may request Network Volumes or Removable Volumes access; Full Disk Access is not required for normal operation.

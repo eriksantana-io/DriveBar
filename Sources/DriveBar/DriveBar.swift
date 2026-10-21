@@ -153,6 +153,9 @@ struct DrivePanel: View {
             }
         }
         .padding(16).frame(width: 420)
+        // Publish the panel's ideal height after filtering instead of accepting
+        // the previous, taller window's proposed height.
+        .fixedSize(horizontal: false, vertical: true)
         .onAppear { store.refresh() }
     }
 }
@@ -164,5 +167,6 @@ struct DriveBarApp: App {
         MenuBarExtra("DriveBar", systemImage: "externaldrive") {
             DrivePanel(store: store)
         }.menuBarExtraStyle(.window)
+            .windowResizability(.contentSize)
     }
 }
