@@ -10,5 +10,10 @@ cp "$BIN/DriveBar" "$APP/Contents/MacOS/DriveBar"
 mkdir -p "$APP/Contents/Resources"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp Info.plist "$APP/Contents/Info.plist"
-codesign --force --sign - "$APP"
+if [[ -n "${DRIVEBAR_SIGNING_IDENTITY:-}" ]]; then
+  codesign --force --options runtime --timestamp --sign "$DRIVEBAR_SIGNING_IDENTITY" "$APP"
+else
+  codesign --force --sign - "$APP"
+fi
+codesign --verify --deep --strict "$APP"
 echo "Built: $APP"

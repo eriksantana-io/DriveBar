@@ -1,5 +1,7 @@
 # DriveBar
 
+For Developer ID signing and Apple notarization, see [SIGNING.md](SIGNING.md).
+
 Version 1.1.1 makes the menu bar panel follow its content height when the ejectable-drive filter changes, so it can shrink after showing a longer list.
 
 Version 1.1 adds a custom app icon and a persistent “Show only ejectable drives” switch, enabled by default. It hides internal and non-ejectable volumes, while mounted network shares remain visible. Turn it off to see all mounted volumes.

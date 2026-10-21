@@ -4,3 +4,7 @@ dist/
 .DS_Store
 *.xcuserstate
 xcuserdata/
+*.p12
+*.p8
+*.key
+.env
