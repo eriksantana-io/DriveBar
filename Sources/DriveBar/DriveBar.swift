@@ -1,31 +1,52 @@
 import SwiftUI
 import AppKit
+import DiskArbitration
 
 struct Drive: Identifiable {
     let url: URL
     let name: String
-    let internalDisk: Bool
+    let internalDisk: Bool?
     let local: Bool
     let ejectable: Bool
     let total: Int64
     let available: Int64
     var id: String { url.path }
-    var canEject: Bool { !internalDisk && (ejectable || !local) && url.path != "/" }
-    var kind: String { internalDisk ? "Internal" : (local ? "External / disk image" : "Network") }
+    var canEject: Bool { DriveEligibility.canEject(path: url.path, local: local, internalDisk: internalDisk, removable: ejectable) }
+    var kind: String { !local ? "Network" : (internalDisk == true ? (canEject ? "Removable media" : "Internal") : (canEject ? "External / disk image" : "Local volume")) }
 
     static func read(_ url: URL) -> Drive? {
         // Query keys separately: one unsupported SMB metadata key must not
         // discard a mounted volume or hide its other available properties.
         let name = try? url.resourceValues(forKeys: [.volumeNameKey]).volumeName
         let local = (try? url.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal) ?? true
-        let internalDisk = (try? url.resourceValues(forKeys: [.volumeIsInternalKey]).volumeIsInternal) ?? local
+        let device = deviceDescription(url)
+        let internalDisk = (try? url.resourceValues(forKeys: [.volumeIsInternalKey]).volumeIsInternal)
+            ?? (device?[kDADiskDescriptionDeviceInternalKey] as? Bool)
         let ejectable = (try? url.resourceValues(forKeys: [.volumeIsEjectableKey]).volumeIsEjectable) ?? false
         let removable = (try? url.resourceValues(forKeys: [.volumeIsRemovableKey]).volumeIsRemovable) ?? false
         let total = (try? url.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity) ?? 0
         let available = (try? url.resourceValues(forKeys: [.volumeAvailableCapacityKey]).volumeAvailableCapacity) ?? 0
         return Drive(url: url, name: name ?? (url.path == "/" ? "Macintosh HD" : url.lastPathComponent),
-                     internalDisk: internalDisk, local: local, ejectable: ejectable || removable,
+                     internalDisk: internalDisk, local: local,
+                     ejectable: ejectable || removable
+                        || (device?[kDADiskDescriptionMediaEjectableKey] as? Bool == true)
+                        || (device?[kDADiskDescriptionMediaRemovableKey] as? Bool == true),
                      total: Int64(total), available: Int64(available))
+    }
+
+    private static func deviceDescription(_ url: URL) -> NSDictionary? {
+        guard let session = DASessionCreate(kCFAllocatorDefault),
+              let disk = DADiskCreateFromVolumePath(kCFAllocatorDefault, session, url as CFURL) else { return nil }
+        let volume = DADiskCopyDescription(disk) as NSDictionary?
+        // Partition descriptions may omit the physical device's location.
+        if volume?[kDADiskDescriptionDeviceInternalKey] != nil { return volume }
+        if let wholeDisk = DADiskCopyWholeDisk(disk),
+           let whole = DADiskCopyDescription(wholeDisk) as NSDictionary? {
+            let combined = NSMutableDictionary(dictionary: volume as? [AnyHashable: Any] ?? [:])
+            combined.addEntries(from: whole as? [AnyHashable: Any] ?? [:])
+            return combined
+        }
+        return volume
     }
 }
 
@@ -61,7 +82,7 @@ final class DriveStore: ObservableObject {
         var seen = Set<String>()
         urls = urls.filter { seen.insert($0.standardizedFileURL.path).inserted }
         drives = urls.compactMap(Drive.read).sorted {
-            if $0.internalDisk != $1.internalDisk { return !$0.internalDisk }
+            if ($0.internalDisk == true) != ($1.internalDisk == true) { return $0.internalDisk != true }
             return $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
     }
@@ -106,7 +127,7 @@ struct DrivePanel: View {
             Divider()
             Toggle("Show only ejectable drives", isOn: $showOnlyEjectableDrives)
                 .toggleStyle(.switch).controlSize(.small)
-                .help("Hide internal and non-ejectable volumes. Mounted network shares remain visible.")
+                .help("Hide system storage and non-ejectable volumes. Removable cards and mounted network shares remain visible.")
             if visibleDrives.isEmpty {
                 Text(showOnlyEjectableDrives ? "No ejectable drives connected. Turn off the filter to see all mounted volumes." : "No mounted drives found.").foregroundStyle(.secondary).padding(.vertical)
             } else {

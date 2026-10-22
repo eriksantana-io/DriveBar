@@ -25,10 +25,11 @@ bash scripts/notarize.sh DriveBar-notary
 
 Copy the exact certificate name (or its SHA-1 identity) from `security find-identity`. The script requires Apple to return Accepted, then staples and validates the ticket, checks Gatekeeper, and produces `dist/DriveBar.zip`. Internet access and access to the signing private key are required. Keychain may ask you to approve codesign access.
 
-Upload the resulting signed archive to the existing release:
+Publish the resulting signed archive as a new release after pushing the source:
 
 ```sh
-gh release upload v1.1.1 dist/DriveBar.zip --clobber
+git push origin main
+gh release create v1.1.2 dist/DriveBar.zip --target main --title "DriveBar 1.1.2" --notes "Fix drive detection for external storage and removable cards in built-in readers."
 ```
 
 For submission errors, use the ID in `dist/notarization-result.json`:

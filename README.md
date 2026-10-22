@@ -1,5 +1,7 @@
 # DriveBar
 
+Version 1.1.2 includes confirmed external fixed-media volumes and removable cards in built-in readers in the ejectable-drive filter. It uses Disk Arbitration device metadata when volume location metadata is missing. System mounts and non-removable internal storage stay protected; unknown local devices require positive removable-media evidence.
+
 For Developer ID signing and Apple notarization, see [SIGNING.md](SIGNING.md).
 
 Version 1.1.1 makes the menu bar panel follow its content height when the ejectable-drive filter changes, so it can shrink after showing a longer list.
