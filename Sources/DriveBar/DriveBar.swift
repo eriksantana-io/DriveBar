@@ -7,6 +7,7 @@ struct Drive: Identifiable {
     let name: String
     let internalDisk: Bool?
     let local: Bool
+    let isSDCard: Bool
     let ejectable: Bool
     let total: Int64
     let available: Int64
@@ -20,6 +21,10 @@ struct Drive: Identifiable {
         let name = try? url.resourceValues(forKeys: [.volumeNameKey]).volumeName
         let local = (try? url.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal) ?? true
         let device = deviceDescription(url)
+        let deviceProtocol = device?[kDADiskDescriptionDeviceProtocolKey] as? String
+        let deviceModel = device?[kDADiskDescriptionDeviceModelKey] as? String
+        let isSDCard = deviceProtocol?.caseInsensitiveCompare("Secure Digital") == .orderedSame
+            || deviceModel?.range(of: #"\b(?:micro)?SD(?:HC|XC|UC)?\b"#, options: [.regularExpression, .caseInsensitive]) != nil
         let internalDisk = (try? url.resourceValues(forKeys: [.volumeIsInternalKey]).volumeIsInternal)
             ?? (device?[kDADiskDescriptionDeviceInternalKey] as? Bool)
         let ejectable = (try? url.resourceValues(forKeys: [.volumeIsEjectableKey]).volumeIsEjectable) ?? false
@@ -27,7 +32,7 @@ struct Drive: Identifiable {
         let total = (try? url.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity) ?? 0
         let available = (try? url.resourceValues(forKeys: [.volumeAvailableCapacityKey]).volumeAvailableCapacity) ?? 0
         return Drive(url: url, name: name ?? (url.path == "/" ? "Macintosh HD" : url.lastPathComponent),
-                     internalDisk: internalDisk, local: local,
+                     internalDisk: internalDisk, local: local, isSDCard: isSDCard,
                      ejectable: ejectable || removable
                         || (device?[kDADiskDescriptionMediaEjectableKey] as? Bool == true)
                         || (device?[kDADiskDescriptionMediaRemovableKey] as? Bool == true),
@@ -38,12 +43,17 @@ struct Drive: Identifiable {
         guard let session = DASessionCreate(kCFAllocatorDefault),
               let disk = DADiskCreateFromVolumePath(kCFAllocatorDefault, session, url as CFURL) else { return nil }
         let volume = DADiskCopyDescription(disk) as NSDictionary?
-        // Partition descriptions may omit the physical device's location.
-        if volume?[kDADiskDescriptionDeviceInternalKey] != nil { return volume }
+        // Partition descriptions may omit physical device metadata.
         if let wholeDisk = DADiskCopyWholeDisk(disk),
            let whole = DADiskCopyDescription(wholeDisk) as NSDictionary? {
             let combined = NSMutableDictionary(dictionary: volume as? [AnyHashable: Any] ?? [:])
-            combined.addEntries(from: whole as? [AnyHashable: Any] ?? [:])
+            if volume?[kDADiskDescriptionDeviceInternalKey] == nil {
+                combined.addEntries(from: whole as? [AnyHashable: Any] ?? [:])
+            } else {
+                for key in [kDADiskDescriptionDeviceProtocolKey, kDADiskDescriptionDeviceModelKey] {
+                    if combined[key] == nil { combined[key] = whole[key] }
+                }
+            }
             return combined
         }
         return volume
@@ -82,6 +92,7 @@ final class DriveStore: ObservableObject {
         var seen = Set<String>()
         urls = urls.filter { seen.insert($0.standardizedFileURL.path).inserted }
         drives = urls.compactMap(Drive.read).sorted {
+            if $0.isSDCard != $1.isSDCard { return $0.isSDCard }
             if ($0.internalDisk == true) != ($1.internalDisk == true) { return $0.internalDisk != true }
             return $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
