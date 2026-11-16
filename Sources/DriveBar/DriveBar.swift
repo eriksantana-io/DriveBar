@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import DiskArbitration
+import ServiceManagement
 
 struct Drive: Identifiable {
     let url: URL
@@ -116,8 +117,61 @@ final class DriveStore: ObservableObject {
     }
 }
 
+@MainActor
+final class LoginItemManager: ObservableObject {
+    @Published private(set) var startsAtLogin = false
+    @Published private(set) var requiresApproval = false
+    @Published private(set) var busy = false
+    @Published private(set) var message: String?
+
+    init() {
+        refresh()
+    }
+
+    func refresh() {
+        switch SMAppService.mainApp.status {
+        case .enabled:
+            startsAtLogin = true
+            requiresApproval = false
+            if message?.hasPrefix("Allow DriveBar") == true { message = nil }
+        case .requiresApproval:
+            startsAtLogin = true
+            requiresApproval = true
+            message = "Allow DriveBar in System Settings → General → Login Items to finish enabling Start at login."
+        case .notRegistered, .notFound:
+            startsAtLogin = false
+            requiresApproval = false
+        @unknown default:
+            startsAtLogin = false
+            requiresApproval = false
+        }
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        guard !busy else { return }
+        busy = true
+        message = nil
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            message = "Couldn’t \(enabled ? "enable" : "disable") Start at login: \(error.localizedDescription)"
+        }
+        busy = false
+        refresh()
+    }
+
+    func openLoginItemsSettings() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+}
+
 struct DrivePanel: View {
     @ObservedObject var store: DriveStore
+    @ObservedObject var loginItemManager: LoginItemManager
     @AppStorage("showOnlyEjectableDrives") private var showOnlyEjectableDrives = true
     private var visibleDrives: [Drive] {
         store.drives.filter { !showOnlyEjectableDrives || $0.canEject }
@@ -139,6 +193,21 @@ struct DrivePanel: View {
             Toggle("Show only ejectable drives", isOn: $showOnlyEjectableDrives)
                 .toggleStyle(.switch).controlSize(.small)
                 .help("Hide system storage and non-ejectable volumes. Removable cards and mounted network shares remain visible.")
+            Toggle("Start at login", isOn: Binding(
+                get: { loginItemManager.startsAtLogin },
+                set: { loginItemManager.setEnabled($0) }
+            ))
+                .toggleStyle(.switch).controlSize(.small)
+                .disabled(loginItemManager.busy)
+                .help("Open DriveBar automatically when you log in to your Mac.")
+            if loginItemManager.requiresApproval {
+                HStack(spacing: 8) {
+                    Text("Approval required in Login Items.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Open Settings") { loginItemManager.openLoginItemsSettings() }
+                        .controlSize(.small)
+                }
+            }
             if visibleDrives.isEmpty {
                 Text(showOnlyEjectableDrives ? "No ejectable drives connected. Turn off the filter to see all mounted volumes." : "No mounted drives found.").foregroundStyle(.secondary).padding(.vertical)
             } else {
@@ -177,6 +246,9 @@ struct DrivePanel: View {
             if let message = store.message {
                 Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
+            if let message = loginItemManager.message {
+                Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
             Divider()
             HStack {
                 Text("Eject before unplugging.").font(.caption).foregroundStyle(.secondary)
@@ -188,16 +260,23 @@ struct DrivePanel: View {
         // Publish the panel's ideal height after filtering instead of accepting
         // the previous, taller window's proposed height.
         .fixedSize(horizontal: false, vertical: true)
-        .onAppear { store.refresh() }
+        .onAppear {
+            store.refresh()
+            loginItemManager.refresh()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            loginItemManager.refresh()
+        }
     }
 }
 
 @main
 struct DriveBarApp: App {
     @StateObject private var store = DriveStore()
+    @StateObject private var loginItemManager = LoginItemManager()
     var body: some Scene {
         MenuBarExtra("DriveBar", systemImage: "externaldrive") {
-            DrivePanel(store: store)
+            DrivePanel(store: store, loginItemManager: loginItemManager)
         }.menuBarExtraStyle(.window)
             .windowResizability(.contentSize)
     }

@@ -1,5 +1,7 @@
 # DriveBar
 
+Version 1.2 adds a native “Start at login” switch. If macOS requires approval, DriveBar links directly to System Settings → General → Login Items and updates the switch after approval.
+
 Version 1.1.2 includes confirmed external fixed-media volumes and removable cards in built-in readers in the ejectable-drive filter. It uses Disk Arbitration device metadata when volume location metadata is missing. System mounts and non-removable internal storage stay protected; unknown local devices require positive removable-media evidence.
 
 For Developer ID signing and Apple notarization, see [SIGNING.md](SIGNING.md).
@@ -25,8 +27,9 @@ The supplied app is built for Apple silicon and signed locally, not notarized. m
 - Eject external volumes using macOS's standard unmount-and-eject API; network shares use the same system request.
 - Internal and non-ejectable volumes have disabled eject buttons.
 - Eject operations run off the UI thread, one at a time. Failure messages stay visible, and the app never force-unmounts a busy disk.
+- Optional Start at login support using macOS's native Login Items service.
 
-Ejecting one partition can affect other volumes on the same physical device, according to macOS behavior. Wait for successful ejection before unplugging. This version has no eject-all action or launch-at-login setting.
+Ejecting one partition can affect other volumes on the same physical device, according to macOS behavior. Wait for successful ejection before unplugging. This version has no eject-all action.
 
 ## Build or edit
 
