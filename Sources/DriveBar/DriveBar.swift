@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import DiskArbitration
+import ServiceManagement
 
 struct Drive: Identifiable {
     let url: URL
@@ -178,6 +179,7 @@ struct DrivePanel: View {
                 Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
             Divider()
+            LoginItemControl()
             HStack {
                 Text("Eject before unplugging.").font(.caption).foregroundStyle(.secondary)
                 Spacer()
@@ -189,6 +191,62 @@ struct DrivePanel: View {
         // the previous, taller window's proposed height.
         .fixedSize(horizontal: false, vertical: true)
         .onAppear { store.refresh() }
+    }
+}
+
+private struct LoginItemControl: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var status = SMAppService.mainApp.status
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("Start at Login", isOn: Binding(
+                get: { status == .enabled || status == .requiresApproval },
+                set: setEnabled
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .help("Open DriveBar automatically when you log in to your Mac.")
+
+            if status == .requiresApproval {
+                Text("Allow DriveBar in Login Items to start it automatically.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Open Login Items") {
+                    SMAppService.openSystemSettingsLoginItems()
+                }
+                .controlSize(.small)
+            }
+
+            if let errorMessage {
+                Text(errorMessage).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { refreshStatus() }
+        .onChange(of: scenePhase) { _ in refreshStatus() }
+    }
+
+    private func refreshStatus() {
+        status = SMAppService.mainApp.status
+    }
+
+    private func setEnabled(_ enabled: Bool) {
+        let service = SMAppService.mainApp
+        errorMessage = nil
+        defer { refreshStatus() }
+        do {
+            if enabled {
+                if service.status != .enabled && service.status != .requiresApproval {
+                    try service.register()
+                }
+            } else if service.status == .enabled || service.status == .requiresApproval {
+                try service.unregister()
+            }
+        } catch {
+            errorMessage = enabled
+                ? "Couldn’t enable Start at Login: \(error.localizedDescription)"
+                : "Couldn’t disable Start at Login: \(error.localizedDescription)"
+        }
     }
 }
 
